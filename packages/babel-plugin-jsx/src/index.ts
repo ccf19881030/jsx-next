@@ -1,5 +1,6 @@
-import syntaxJsx from '@babel/plugin-syntax-jsx';
 import * as t from '@babel/types';
+import syntaxJsx from '@babel/plugin-syntax-jsx';
+import { addNamed } from '@babel/helper-module-imports';
 import { NodePath } from '@babel/traverse';
 import tranformVueJSX from './transform-vue-jsx';
 import sugarFragment from './sugar-fragment';
@@ -20,14 +21,44 @@ export interface Opts {
 
 export type ExcludesBoolean = <T>(x: T | false | true) => x is T;
 
+const hasJSX = (parentPath: NodePath) => {
+  let fileHasJSX = false;
+  parentPath.traverse({
+    JSXElement(path) { // skip ts error
+      fileHasJSX = true;
+      path.stop();
+    },
+    JSXFragment(path) {
+      fileHasJSX = true;
+      path.stop();
+    },
+  });
+
+  return fileHasJSX;
+};
+
 export default () => ({
   name: 'babel-plugin-jsx',
   inherits: syntaxJsx,
   visitor: {
     Program: {
+      enter(path: NodePath, state: State) {
+        if (hasJSX(path)) {
+          state.set(JSX_HELPER_KEY, new Set<string>());
+          const importMap: Record<string, string> = {};
+          state.set('@vue/babel-plugin-jsx/rumtimeIsSlot', () => {
+            if (importMap.isSlot) {
+              return t.identifier(importMap.isSlot);
+            }
+            const identifier = addNamed(path, 'isSlot', '@vue/babel-plugin-jsx/dist/rumtime');
+            importMap.isSlot = identifier.name;
+            return identifier;
+          });
+        }
+      },
       exit(path: NodePath<t.Program>, state: State) {
         const helpers: Set<string> = state.get(JSX_HELPER_KEY);
-        if (!helpers) {
+        if (!helpers?.size) {
           return;
         }
 

@@ -17,9 +17,6 @@ const FRAGMENT = 'Fragment';
 const createIdentifier = (
   state: State, id: string,
 ): t.Identifier => {
-  if (!state.get(JSX_HELPER_KEY)) {
-    state.set(JSX_HELPER_KEY, new Set());
-  }
   const helpers = state.get(JSX_HELPER_KEY);
   helpers.add(id);
   return t.identifier(id);

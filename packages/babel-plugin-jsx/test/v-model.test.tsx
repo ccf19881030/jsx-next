@@ -197,6 +197,7 @@ test('underscore modifier should work in custom component', async () => {
         default: () => ({ double: false }),
       },
     },
+    emits: ['update:modelValue'],
     setup(props, { emit }) {
       const handleClick = () => {
         emit('update:modelValue', 3);

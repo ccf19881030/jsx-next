@@ -83,29 +83,100 @@ const transformJSXElement = (
 
   const slotFlag = path.getData('slotFlag') || SlotFlags.STABLE;
 
+  let VNodeChild;
+
+  if (children.length > 1 || slots) {
+    VNodeChild = isComponent ? t.objectExpression([
+      !!children.length && t.objectProperty(
+        t.identifier('default'),
+        t.arrowFunctionExpression([], t.arrayExpression(buildIIFE(path, children))),
+      ),
+      ...(slots ? (
+        t.isObjectExpression(slots)
+          ? (slots! as t.ObjectExpression).properties
+          : [t.spreadElement(slots!)]
+      ) : []),
+      optimize && t.objectProperty(
+        t.identifier('_'),
+        t.numericLiteral(slotFlag),
+      ),
+    ].filter(Boolean as any)) : t.arrayExpression(children);
+  } else if (children.length === 1) {
+    const child = children[0];
+    if (t.isIdentifier(child)) {
+      VNodeChild = t.conditionalExpression(
+        t.callExpression(state.get('@vue/babel-plugin-jsx/rumtimeIsSlot')(), [child]),
+        child,
+        t.objectExpression([
+          t.objectProperty(
+            t.identifier('default'),
+            t.arrowFunctionExpression([], t.arrayExpression(buildIIFE(path, [child]))),
+          ),
+          optimize && t.objectProperty(
+            t.identifier('_'),
+            t.numericLiteral(slotFlag),
+          ) as any,
+        ].filter(Boolean)),
+      );
+    } else if (
+      t.isCallExpression(child) && child.loc && isComponent
+    ) { // the element was generated and doesn't have location information
+      const slotId = path.scope.generateUidIdentifier('slot');
+      const scope = path.hub.getScope();
+      if (scope) {
+        scope.push({
+          id: slotId,
+          kind: 'let',
+        });
+      }
+
+      VNodeChild = t.conditionalExpression(
+        t.callExpression(
+          state.get('@vue/babel-plugin-jsx/rumtimeIsSlot')(),
+          [t.assignmentExpression('=', slotId, child)],
+        ),
+        slotId,
+        t.objectExpression([
+          t.objectProperty(
+            t.identifier('default'),
+            t.arrowFunctionExpression([], t.arrayExpression(buildIIFE(path, [slotId]))),
+          ),
+          optimize && t.objectProperty(
+            t.identifier('_'),
+            t.numericLiteral(slotFlag),
+          ) as any,
+        ].filter(Boolean)),
+      );
+    } else if (t.isArrowFunctionExpression(child)) {
+      VNodeChild = t.objectExpression([
+        t.objectProperty(
+          t.identifier('default'),
+          child,
+        ),
+      ]);
+    } else if (t.isObjectExpression(child)) {
+      VNodeChild = t.objectExpression([
+        ...child.properties,
+        optimize && t.objectProperty(
+          t.identifier('_'),
+          t.numericLiteral(slotFlag),
+        ),
+      ].filter(Boolean as any));
+    } else {
+      VNodeChild = isComponent ? t.objectExpression([
+        t.objectProperty(
+          t.identifier('default'),
+          t.arrowFunctionExpression([], t.arrayExpression([child])),
+        ),
+      ]) : t.arrayExpression([child]);
+    }
+  }
+
   // @ts-ignore
   const createVNode = t.callExpression(createIdentifier(state, 'createVNode'), [
     tag,
     props,
-    (children.length || slots) ? (
-      isComponent
-        ? t.objectExpression([
-          !!children.length && t.objectProperty(
-            t.identifier('default'),
-            t.arrowFunctionExpression([], t.arrayExpression(buildIIFE(path, children))),
-          ),
-          ...(slots ? (
-            t.isObjectExpression(slots)
-              ? (slots! as t.ObjectExpression).properties
-              : [t.spreadElement(slots!)]
-          ) : []),
-          optimize && t.objectProperty(
-            t.identifier('_'),
-            t.numericLiteral(slotFlag),
-          ),
-        ].filter(Boolean as any))
-        : t.arrayExpression(children)
-    ) : t.nullLiteral(),
+    VNodeChild || t.nullLiteral(),
     !!patchFlag && optimize && t.numericLiteral(patchFlag),
     !!dynamicPropNames.size && optimize
     && t.arrayExpression(

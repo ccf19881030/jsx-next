@@ -99,7 +99,8 @@ createVNode(\\"div\\", a, null);"
 `;
 
 exports[`reassign variable as component: reassign variable as component 1`] = `
-"import { defineComponent, createVNode } from \\"vue\\";
+"import { isSlot as _isSlot } from \\"@vue/babel-plugin-jsx/dist/rumtime\\";
+import { defineComponent, createVNode } from \\"vue\\";
 let a = 1;
 const A = defineComponent({
   setup(_, {
@@ -116,7 +117,7 @@ const _a = function () {
   return a;
 }();
 
-a = createVNode(A, null, {
+a = createVNode(A, null, _isSlot(a) ? a : {
   default: () => [_a],
   _: 2
 });"
